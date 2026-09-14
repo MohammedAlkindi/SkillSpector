@@ -838,6 +838,11 @@ def test_analyzer_recognized_script_suffixes_classify_as_executable(suffix: str)
     assert is_executable_content("helper" + suffix, b"payload without a shebang") is True
 
 
+@pytest.mark.parametrize("suffix", [".d.cts", ".d.mts"])
+def test_typescript_declaration_suffixes_do_not_classify_as_executable(suffix: str) -> None:
+    assert is_executable_content("types" + suffix, b"declare const value: string;") is False
+
+
 def test_hidden_standalone_esm_script_has_sc9_and_stays_local(tmp_path: Path) -> None:
     (tmp_path / ".setup.mjs").write_text('import cp from "child_process";', encoding="utf-8")
 
