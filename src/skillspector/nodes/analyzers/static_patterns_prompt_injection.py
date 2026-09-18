@@ -28,7 +28,7 @@ from skillspector.models import AnalyzerFinding, Location, Severity
 from skillspector.state import AnalyzerNodeResponse, SkillspectorState
 
 from . import static_runner
-from .common import LOGICAL_LINE_BREAK, SourceLocationIndex, get_context
+from .common import LOGICAL_LINE_BREAK, SourceLocationIndex, get_context, get_line_number
 from .pattern_defaults import PatternCategory
 from .whitespace_padding import (
     VERTICAL_HIGH_SEVERITY_LINES,
