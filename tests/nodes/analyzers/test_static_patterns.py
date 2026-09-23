@@ -22,7 +22,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from skillspector.models import AnalyzerFinding, Location, Severity
+from skillspector.models import (
+    AnalyzerFinding,
+    Location,
+    Severity,
+    compute_match_fingerprint,
+    observe_analyzer_findings,
+)
 from skillspector.nodes.analyzers import (
     static_patterns_agent_snooping as agent_snooping_module,
 )
@@ -169,6 +175,60 @@ class TestRunStaticPatternsPromptInjection:
         }
         findings = static_runner.run_static_patterns(state, [prompt_injection_module])
         assert not any(f.rule_id == "P2" for f in findings)
+
+    def test_p2_bidi_scan_observes_runtime_deadline_per_match(self):
+        """The file-type-independent bidi scan must check the runtime callback per
+        emitted match, as the markdown P2 loop does, so a script with a bidi
+        control on every line cannot be enumerated to completion after the
+        deadline has already expired."""
+        rlo = chr(0x202E)
+        pdf = chr(0x202C)
+        content = "".join(f"x{i} = 1  # {rlo}evil{pdf}\n" for i in range(2_000))
+        built = 0
+
+        def count_p2_findings(finding: AnalyzerFinding) -> None:
+            nonlocal built
+            if finding.rule_id == "P2":
+                built += 1
+
+        def expire_after_three_p2_findings() -> None:
+            if built >= 3:
+                raise TimeoutError("inert bidi deadline")
+
+        with (
+            observe_analyzer_findings(count_p2_findings),
+            pytest.raises(TimeoutError, match="inert bidi deadline"),
+        ):
+            prompt_injection_module.analyze(
+                content=content,
+                file_path="scripts/helper.py",
+                file_type="python",
+                check_runtime=expire_after_three_p2_findings,
+            )
+        assert built == 3
+
+    def test_p2_bidi_finding_in_python_file_has_exact_location(self):
+        """The moved bidi scan keeps the exact occurrence location and the
+        complete-match identity that the markdown P2 path records."""
+        rlo = chr(0x202E)
+        pdf = chr(0x202C)
+        findings = prompt_injection_module.analyze(
+            content=f'import os\naccess_level = "user"  # {rlo}nimda si resu{pdf}\n',
+            file_path="scripts/helper.py",
+            file_type="python",
+        )
+        p2 = [f for f in findings if f.rule_id == "P2"]
+        assert [f.location for f in p2] == [
+            Location(
+                file="scripts/helper.py",
+                start_line=2,
+                end_line=2,
+                start_column=25,
+                end_column=26,
+            )
+        ]
+        assert [f.matched_text for f in p2] == [rlo]
+        assert [f.match_fingerprint for f in p2] == [compute_match_fingerprint("P2", rlo)]
 
     def test_p2_unicode_tag_smuggling_produces_finding(self):
         """Unicode Tag-block 'ASCII smuggling' (U+E0000-E007F) yields P2."""
