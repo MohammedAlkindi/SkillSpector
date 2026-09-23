@@ -28,7 +28,7 @@ from skillspector.models import AnalyzerFinding, Location, Severity
 from skillspector.state import AnalyzerNodeResponse, SkillspectorState
 
 from . import static_runner
-from .common import LOGICAL_LINE_BREAK, SourceLocationIndex, get_context, get_line_number
+from .common import LOGICAL_LINE_BREAK, SourceLocationIndex, get_context
 from .pattern_defaults import PatternCategory
 from .whitespace_padding import (
     VERTICAL_HIGH_SEVERITY_LINES,
@@ -466,18 +466,19 @@ def analyze(
     # (issue #39). Zero-width detection stays markdown-gated because
     # ZERO_WIDTH_CHARS includes U+FEFF (BOM), which would false-positive on
     # every BOM-prefixed source file; the bidi range never overlaps it.
-    for match in _p2_pattern_matches(content, _BIDI_CONTROL_PATTERN):
-        line_num = get_line_number(content, match.start())
+    for match in _p2_pattern_matches(content, _BIDI_CONTROL_PATTERN, check_runtime):
+        runtime_check()
         findings.append(
             AnalyzerFinding(
                 rule_id="P2",
                 message="Hidden Instructions",
                 severity=Severity.HIGH,
-                location=loc(line_num),
+                location=locations.location(match.start(), match.end()),
                 confidence=0.85,
                 tags=tag,
                 context=ctx(match.start()),
                 matched_text=match.group(0)[:200],
+                complete_match=match.group(0),
             )
         )
 
